@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Phone, Mail, Camera, Loader2, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,291 +12,261 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 export function ProfilePage() {
-  const { user } = useAuthStore();
+  const { user, fetchUser } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: user?.first_name || '',
     lastName: user?.last_name || '',
     email: user?.email || '',
     phone: user?.phone || '',
   });
+  const [avatar, setAvatar] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Vérifier le type de fichier
-    if (!file.type.startsWith('image/')) {
-      toast.error('Le fichier doit être une image');
-      return;
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        firstName: user.first_name,
+        lastName: user.last_name,
+        email: user.email,
+        phone: user.phone,
+      });
     }
-
-    // Vérifier la taille du fichier (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('L\'image ne doit pas dépasser 5MB');
-      return;
-    }
-
-    try {
-      setIsUploading(true);
-      const avatarUrl = await uploadAvatar(file, user.id);
-
-      if (avatarUrl) {
-        // Mettre à jour le profil avec la nouvelle URL
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ avatar_url: avatarUrl })
-          .eq('id', user.id);
-
-        if (updateError) throw updateError;
-
-        // Recharger les données utilisateur
-        await useAuthStore.getState().fetchUser();
-        toast.success('Avatar mis à jour avec succès');
-      }
-    } catch (error) {
-      console.error('Error uploading avatar:', error);
-      toast.error('Erreur lors de la mise à jour de l\'avatar');
-    } finally {
-      setIsUploading(false);
-    }
-  };
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
 
     try {
-      // Mettre à jour le profil
+      const updates = {
+        id: user!.id,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        phone: formData.phone,
+        updated_at: new Date().toISOString(),
+      };
+
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone: formData.phone,
-        })
-        .eq('id', user.id);
+        .update(updates)
+        .eq('id', user!.id);
 
       if (updateError) throw updateError;
 
-      // Mettre à jour l'email si changé
-      if (formData.email !== user.email) {
-        const { error: emailError } = await supabase.auth.updateUser({
-          email: formData.email
-        });
+      if (avatar) {
+        const fileExt = avatar.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const filePath = `${user!.id}/${user!.id}.${fileExt}`;
 
-        if (emailError) throw emailError;
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, avatar, {
+            upsert: true,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+
+        if (urlData) {
+          const { error: avatarError } = await supabase
+            .from('profiles')
+            .update({
+              avatar_url: urlData.publicUrl,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', user!.id);
+
+          if (avatarError) throw avatarError;
+        }
       }
 
-      // Rafraîchir les données utilisateur
-      await useAuthStore.getState().fetchUser();
+      await fetchUser();
       setIsEditing(false);
       toast.success('Profil mis à jour avec succès');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      setError(error.message);
+      toast.error('Erreur lors de la mise à jour du profil');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  if (!user) return null;
+  if (!user) {
+    return null;
+  }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Mon profil</h1>
-        <p className="text-gray-500">
-          Gérez vos informations personnelles et vos préférences
-        </p>
-      </div>
+    <div className="container max-w-4xl py-8">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Mon profil</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Gérez vos informations personnelles et vos préférences
+          </p>
+        </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Informations personnelles</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="flex justify-center mb-6">
-                <div className="relative">
-                  <Avatar
-                    src={user.avatar_url}
-                    fallbackText={getFullName(user)}
-                    size="lg"
-                    className="border-4 border-orange-100"
-                  />
-                  <label
-                    htmlFor="avatar-upload"
-                    className="absolute bottom-0 right-0 p-1 rounded-full bg-orange-500 text-white cursor-pointer hover:bg-orange-600 transition-colors"
-                  >
-                    {isUploading ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <Upload className="h-5 w-5" />
-                    )}
-                  </label>
-                  <input
-                    id="avatar-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarChange}
-                    disabled={isUploading}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                      Prénom
-                    </label>
-                    <div className="mt-1 relative">
-                      <Input
-                        id="firstName"
-                        value={formData.firstName}
-                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                      <User className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                      Nom
-                    </label>
-                    <div className="mt-1 relative">
-                      <Input
-                        id="lastName"
-                        value={formData.lastName}
-                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                      <User className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                    Email
-                  </label>
-                  <div className="mt-1 relative">
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      disabled={!isEditing}
-                    />
-                    <Mail className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                    Téléphone
-                  </label>
-                  <div className="mt-1 relative">
-                    <Input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      disabled={!isEditing}
-                    />
-                    <Phone className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                {isEditing ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsEditing(false)}
-                    >
-                      Annuler
-                    </Button>
-                    <Button type="submit">
-                      Enregistrer
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={() => setIsEditing(true)}
-                  >
-                    Modifier
-                  </Button>
-                )}
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
+        <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Rôle et permissions</CardTitle>
+              <CardTitle>Informations personnelles</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Rôle</label>
-                  <p className="mt-1 text-sm capitalize">{user?.role.replace('_', ' ')}</p>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="p-3 text-sm text-white bg-red-500 rounded">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex justify-center">
+                  <AvatarUpload
+                    avatarUrl={user.avatar_url}
+                    onFileSelect={(file) => setAvatar(file)}
+                    disabled={!isEditing}
+                  />
                 </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">
+                      Prénom
+                    </label>
+                    <Input
+                      value={formData.firstName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, firstName: e.target.value })
+                      }
+                      disabled={!isEditing}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">
+                      Nom
+                    </label>
+                    <Input
+                      value={formData.lastName}
+                      onChange={(e) =>
+                        setFormData({ ...formData, lastName: e.target.value })
+                      }
+                      disabled={!isEditing}
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Permissions</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <Input value={formData.email} disabled />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Téléphone
+                  </label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
+                    }
+                    disabled={!isEditing}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
+                    Permissions
+                  </label>
                   <ul className="mt-1 space-y-1">
-                    {user?.role === 'admin' && (
+                    {user.permissions?.includes('manage_system') && (
                       <>
                         <li className="text-sm">✓ Gestion des utilisateurs</li>
-                        <li className="text-sm">✓ Gestion des contrats</li>
-                        <li className="text-sm">✓ Paramètres système</li>
+                        <li className="text-sm">✓ Configuration du système</li>
+                        <li className="text-sm">✓ Rapports avancés</li>
                       </>
                     )}
-                    {(user?.role === 'agent_senior' || user?.role === 'agent_junior') && (
+                    {user.permissions?.includes('manage_clients') && (
                       <>
                         <li className="text-sm">✓ Gestion des clients</li>
                         <li className="text-sm">✓ Gestion des contrats</li>
                       </>
                     )}
-                    {user?.role === 'client' && (
+                    {user.permissions?.includes('consult_contracts') && (
                       <>
                         <li className="text-sm">✓ Consultation des contrats</li>
+                      </>
+                    )}
+                    {user.permissions?.includes('declare_claims') && (
+                      <>
                         <li className="text-sm">✓ Déclaration de sinistres</li>
                       </>
                     )}
                   </ul>
                 </div>
-              </div>
+
+                <div className="flex justify-end space-x-2">
+                  {isEditing ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsEditing(false)}
+                        disabled={isLoading}
+                      >
+                        Annuler
+                      </Button>
+                      <Button type="submit" disabled={isLoading}>
+                        {isLoading ? 'Enregistrement...' : 'Enregistrer'}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={() => setIsEditing(true)}
+                      disabled={isLoading}
+                    >
+                      Modifier
+                    </Button>
+                  )}
+                </div>
+              </form>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Sécurité</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Button variant="outline" className="w-full">
-                  Changer le mot de passe
-                </Button>
-                <Button variant="outline" className="w-full">
-                  Activer la double authentification
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {user.permissions?.includes('manage_system') && (
+            <div className="mt-6">
+              <h3 className="text-lg font-medium text-gray-900">
+                Administration
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Accès aux fonctionnalités d'administration du système
+              </p>
+            </div>
+          )}
+
+          {user.permissions?.includes('manage_clients') && (
+            <div className="mt-6">
+              <h3 className="text-lg font-medium text-gray-900">
+                Gestion des clients
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Accès à la gestion des clients et des contrats
+              </p>
+            </div>
+          )}
+
+          <div className="mt-6">
+            <h3 className="text-lg font-medium text-gray-900">
+              Statut du compte
+            </h3>
+            <p className="mt-1 text-sm capitalize">{user.status}</p>
+          </div>
         </div>
       </div>
     </div>

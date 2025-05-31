@@ -1,0 +1,90 @@
+Structure du projet (exclusions : node_modules, nhost, .vscode, .nuxt, .output, .git, .bolt, .next)
+========================================
+
+📄 .env.local
+📄 .gitignore
+📄 eslint.config.js
+📄 index.html
+📄 liste.mjs
+📄 package-lock.json
+📄 package.json
+📄 postcss.config.js
+📄 project_structure.txt
+📄 project_structure_1.txt
+📁 public
+  📄 favicon.svg
+📁 src
+  📄 App.tsx
+  📁 components
+    📁 auth
+      📄 ProtectedRoute.tsx
+      📄 RoleRoute.tsx
+      📄 StatusRoute.tsx
+    📁 layout
+      📄 Header.tsx
+      📄 Sidebar.tsx
+      📄 UserAvatarMenu.tsx
+    📁 ui
+      📄 avatar-dropdown.tsx
+      📄 avatar-upload.tsx
+      📄 avatar.tsx
+      📄 button.tsx
+      📄 card.tsx
+      📄 dropdown-menu.tsx
+      📄 input.tsx
+      📄 label.tsx
+      📄 LoadingSpinner.tsx
+      📄 select.tsx
+      📄 tabs.tsx
+      📄 theme-toggle.tsx
+  📁 context
+  📄 index.css
+  📁 layouts
+    📄 RootLayout.tsx
+  📁 lib
+    📄 supabase.ts
+    📄 utils.ts
+  📄 main.tsx
+  📁 pages
+    📁 agents
+      📄 AgentsPage.tsx
+    📁 auth
+      📄 LoginPage.tsx
+      📄 RegisterPage.tsx
+      📄 VerifyEmailPage.tsx
+    📁 clients
+      📄 ClientsPage.tsx
+    📁 contracts
+      📄 ContractsPage.tsx
+    📁 dashboard
+      📄 DashboardPage.tsx
+    📁 profile
+      📄 ProfilePage.tsx
+    📁 settings
+      📄 SettingsPage.tsx
+  📁 providers
+    📄 theme-provider.tsx
+  📁 store
+    📄 authStore.ts
+  📄 vite-env.d.ts
+📁 supabase
+  📁 .temp
+    📄 cli-latest
+    📄 gotrue-version
+    📄 pooler-url
+    📄 postgres-version
+    📄 project-ref
+    📄 rest-version
+    📄 storage-version
+  📄 config.toml
+  📁 functions
+    📁 reset-db
+      📄 index.ts
+  📁 migrations
+    📄 20240531_reset_database.sql
+    📄 20240601_update_profiles.sql
+📄 tailwind.config.js
+📄 tsconfig.app.json
+📄 tsconfig.json
+📄 tsconfig.node.json
+📄 vite.config.ts

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase, type UserProfile, type UserRole } from '../lib/supabase';
+import { supabase, type UserProfile, type UserStatus } from '../lib/supabase';
 
 interface AuthState {
   user: UserProfile | null;
@@ -18,8 +18,9 @@ const validateUserProfile = (profile: any): profile is UserProfile => {
     typeof profile.first_name === 'string' &&
     typeof profile.last_name === 'string' &&
     typeof profile.phone === 'string' &&
-    typeof profile.role === 'string' &&
-    ['client', 'agent_junior', 'agent_senior', 'admin'].includes(profile.role)
+    typeof profile.status === 'string' &&
+    ['pending', 'active', 'suspended', 'blocked'].includes(profile.status) &&
+    typeof profile.display_name === 'string'
   );
 };
 
@@ -97,7 +98,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
 
-      console.log('Profile loaded:', profile.id, profile.role);
+      console.log('Profile loaded:', profile.id, profile.status);
       set({ user: profile, isLoading: false, error: null, initialized: true });
     } catch (error) {
       console.error('Error in fetchUser:', error);

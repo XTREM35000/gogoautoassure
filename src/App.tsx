@@ -1,4 +1,5 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { RootLayout } from '@/layouts/RootLayout';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
@@ -9,7 +10,7 @@ import { ClientsPage } from '@/pages/clients/ClientsPage';
 import { AgentsPage } from '@/pages/agents/AgentsPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
 import { ProfilePage } from '@/pages/profile/ProfilePage';
-import { RoleRoute, PublicRoute } from '@/components/auth/RoleRoute';
+import { StatusRoute, PublicRoute } from '@/components/auth/StatusRoute';
 
 const router = createBrowserRouter([
   {
@@ -25,39 +26,48 @@ const router = createBrowserRouter([
     element: <PublicRoute><VerifyEmailPage /></PublicRoute>
   },
   {
+    path: '/account-restricted',
+    element: <PublicRoute><div>Votre compte est restreint. Contactez l'administrateur.</div></PublicRoute>
+  },
+  {
     path: '/',
     element: <RootLayout />,
     children: [
       {
         index: true,
-        element: <RoleRoute allowedRoles={['client', 'agent_junior', 'agent_senior', 'admin']}><DashboardPage /></RoleRoute>
+        element: <StatusRoute><DashboardPage /></StatusRoute>
       },
       {
         path: 'contracts',
-        element: <RoleRoute allowedRoles={['client', 'agent_junior', 'agent_senior', 'admin']}><ContractsPage /></RoleRoute>
+        element: <StatusRoute><ContractsPage /></StatusRoute>
       },
       {
         path: 'clients',
-        element: <RoleRoute allowedRoles={['agent_junior', 'agent_senior', 'admin']}><ClientsPage /></RoleRoute>
+        element: <StatusRoute><ClientsPage /></StatusRoute>
       },
       {
         path: 'agents',
-        element: <RoleRoute allowedRoles={['admin']}><AgentsPage /></RoleRoute>
+        element: <StatusRoute><AgentsPage /></StatusRoute>
       },
       {
         path: 'settings',
-        element: <RoleRoute allowedRoles={['admin']}><SettingsPage /></RoleRoute>
+        element: <StatusRoute><SettingsPage /></StatusRoute>
       },
       {
         path: 'profile',
-        element: <RoleRoute allowedRoles={['client', 'agent_junior', 'agent_senior', 'admin']}><ProfilePage /></RoleRoute>
+        element: <StatusRoute><ProfilePage /></StatusRoute>
       }
     ]
   }
 ]);
 
 function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <Toaster position="top-right" />
+    </>
+  );
 }
 
 export default App;

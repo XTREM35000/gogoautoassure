@@ -1,232 +1,183 @@
-import React, { useState } from 'react';
-import {
-  Search,
-  Plus,
-  Filter,
-  User,
-  Phone,
-  Mail,
-  Calendar,
-  MoreVertical,
-  Shield,
-  UserCheck
-} from 'lucide-react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
-import { formatDate } from '@/lib/utils';
-import { UserRole } from '@/lib/supabase';
+import { useAuthStore } from '@/store/authStore';
+import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
 
-// Mock data
-const mockAgents = [
+interface Agent {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  avatar_url?: string;
+  status: string;
+  permissions: string[];
+  clients_count: number;
+  contracts_count: number;
+  created_at: string;
+}
+
+const mockAgents: Agent[] = [
   {
     id: '1',
-    first_name: 'Adama',
-    last_name: 'Koné',
-    email: 'adama.kone@g3a.ci',
-    phone: '+225 07 07 07 07 07',
-    role: 'agent_senior' as UserRole,
-    created_at: '2023-01-15T00:00:00Z',
+    first_name: 'John',
+    last_name: 'Doe',
+    email: 'john.doe@example.com',
+    status: 'active',
+    permissions: ['manage_clients', 'manage_contracts'],
     clients_count: 45,
     contracts_count: 78,
-    avatar_url: null,
-    status: 'active'
+    created_at: '2024-01-15T00:00:00Z'
   },
   {
     id: '2',
-    first_name: 'Sarah',
-    last_name: 'Touré',
-    email: 'sarah.toure@g3a.ci',
-    phone: '+225 01 01 01 01 01',
-    role: 'agent_junior' as UserRole,
-    created_at: '2023-03-20T00:00:00Z',
+    first_name: 'Jane',
+    last_name: 'Smith',
+    email: 'jane.smith@example.com',
+    status: 'active',
+    permissions: ['manage_clients'],
     clients_count: 23,
     contracts_count: 34,
-    avatar_url: null,
-    status: 'active'
+    created_at: '2024-03-20T00:00:00Z'
   },
   {
     id: '3',
-    first_name: 'Marc',
-    last_name: 'Kouassi',
-    email: 'marc.kouassi@g3a.ci',
-    phone: '+225 05 05 05 05 05',
-    role: 'agent_senior' as UserRole,
-    created_at: '2023-06-10T00:00:00Z',
+    first_name: 'Bob',
+    last_name: 'Johnson',
+    email: 'bob.johnson@example.com',
+    status: 'suspended',
+    permissions: ['manage_clients', 'manage_contracts'],
     clients_count: 56,
     contracts_count: 92,
-    avatar_url: null,
-    status: 'active'
-  }
+    created_at: '2024-06-10T00:00:00Z'
+  },
 ];
+
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'active':
+      return 'bg-green-100 text-green-800';
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'suspended':
+      return 'bg-red-100 text-red-800';
+    case 'blocked':
+      return 'bg-gray-100 text-gray-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'active':
+      return 'Actif';
+    case 'pending':
+      return 'En attente';
+    case 'suspended':
+      return 'Suspendu';
+    case 'blocked':
+      return 'Bloqué';
+    default:
+      return status;
+  }
+};
 
 export function AgentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [agents] = useState<Agent[]>(mockAgents);
+  const { user } = useAuthStore();
 
-  const filteredAgents = mockAgents.filter(agent =>
+  if (!user?.permissions?.includes('manage_system')) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-500">Accès non autorisé</p>
+      </div>
+    );
+  }
+
+  const filteredAgents = agents.filter(agent =>
     agent.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     agent.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    agent.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    agent.phone.includes(searchTerm)
+    agent.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName[0]}${lastName[0]}`.toUpperCase();
-  };
-
-  const getRoleLabel = (role: UserRole) => {
-    switch (role) {
-      case 'agent_senior':
-        return 'Agent Senior';
-      case 'agent_junior':
-        return 'Agent Junior';
-      default:
-        return role;
-    }
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+    <div className="container py-8">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Agents</h1>
-          <p className="text-gray-500">
-            Gérez votre équipe d'agents d'assurance
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Agents</h1>
+          <p className="text-gray-500">Gérez les agents et leurs permissions</p>
         </div>
-        <Button className="shrink-0">
-          <Plus className="w-4 h-4 mr-2" />
-          Nouvel agent
-        </Button>
+        <Button>Ajouter un agent</Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Agents actifs</CardTitle>
-            <Shield className="w-4 h-4 text-teal-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{mockAgents.length}</div>
-            <p className="text-xs text-gray-500">+2 depuis le mois dernier</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total clients</CardTitle>
-            <UserCheck className="w-4 h-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {mockAgents.reduce((sum, agent) => sum + agent.clients_count, 0)}
-            </div>
-            <p className="text-xs text-gray-500">+15 depuis le mois dernier</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Total contrats</CardTitle>
-            <User className="w-4 h-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {mockAgents.reduce((sum, agent) => sum + agent.contracts_count, 0)}
-            </div>
-            <p className="text-xs text-gray-500">+23 depuis le mois dernier</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex flex-col gap-4 md:flex-row">
-        <div className="relative w-full md:w-64">
-          <Search className="absolute top-0 left-3 h-full text-gray-400" size={18} />
+      <div className="flex gap-4 mb-6">
+        <div className="relative flex-1 max-w-sm">
           <Input
+            type="text"
             placeholder="Rechercher un agent..."
-            className="pl-10"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
           />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
         </div>
-        <Button variant="outline" className="flex gap-2">
-          <Filter size={18} />
-          Filtrer
-        </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Liste des agents</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {filteredAgents.map((agent) => (
-              <div
-                key={agent.id}
-                className="flex items-center justify-between p-4 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <Avatar
-                    src={agent.avatar_url}
-                    alt={`${agent.first_name} ${agent.last_name}`}
-                    fallbackText={`${agent.first_name} ${agent.last_name}`}
-                    className="h-12 w-12 bg-orange-100 text-orange-600"
-                  />
+      <div className="grid gap-6">
+        {filteredAgents.map((agent) => {
+          const initials = `${agent.first_name[0]}${agent.last_name[0]}`.toUpperCase();
 
-                  <div className="grid grid-cols-2 gap-x-12 gap-y-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{`${agent.first_name} ${agent.last_name}`}</p>
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                          agent.role === 'agent_senior'
-                            ? 'bg-orange-100 text-orange-800'
-                            : 'bg-teal-100 text-teal-800'
-                        }`}>
-                          {getRoleLabel(agent.role)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <UserCheck size={14} />
-                          <span>{agent.clients_count} clients</span>
+          return (
+            <Card key={agent.id}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {agent.first_name} {agent.last_name}
+                </CardTitle>
+                <div className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(agent.status)}`}>
+                  {getStatusLabel(agent.status)}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-start space-x-4">
+                  <Avatar>
+                    {agent.avatar_url ? (
+                      <Avatar.Image src={agent.avatar_url} alt={`${agent.first_name} ${agent.last_name}`} />
+                    ) : (
+                      <Avatar.Fallback>{initials}</Avatar.Fallback>
+                    )}
+                  </Avatar>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-900">
+                      {agent.email}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {agent.permissions.includes('manage_clients') && (
+                        <div className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                          Gestion clients
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Shield size={14} />
-                          <span>{agent.contracts_count} contrats</span>
+                      )}
+                      {agent.permissions.includes('manage_contracts') && (
+                        <div className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
+                          Gestion contrats
                         </div>
-                      </div>
+                      )}
                     </div>
-
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Phone size={14} />
-                      <span>{agent.phone}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Mail size={14} />
-                      <span>{agent.email}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Calendar size={14} />
-                      <span>Agent depuis le {formatDate(agent.created_at)}</span>
+                    <div className="mt-2 text-sm text-gray-500">
+                      <p>{agent.clients_count} clients</p>
+                      <p>{agent.contracts_count} contrats</p>
+                      <p>Depuis le {new Date(agent.created_at).toLocaleDateString()}</p>
                     </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm">
-                    Voir détails
-                  </Button>
-                  <Button variant="ghost" size="icon">
-                    <MoreVertical size={18} />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -5,10 +5,12 @@ import { cn } from '@/lib/utils';
 
 interface AvatarUploadProps {
   onFileSelect: (file: File) => void;
+  avatarUrl?: string;
+  disabled?: boolean;
   className?: string;
 }
 
-export function AvatarUpload({ onFileSelect, className }: AvatarUploadProps) {
+export function AvatarUpload({ onFileSelect, avatarUrl, disabled = false, className }: AvatarUploadProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -35,15 +37,21 @@ export function AvatarUpload({ onFileSelect, className }: AvatarUploadProps) {
   };
 
   const handleClick = () => {
-    fileInputRef.current?.click();
+    if (!disabled) {
+      fileInputRef.current?.click();
+    }
   };
 
   const handleRemove = () => {
-    setPreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (!disabled) {
+      setPreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
+
+  const displayImage = preview || avatarUrl;
 
   return (
     <div className={cn('flex flex-col items-center gap-4', className)}>
@@ -53,28 +61,35 @@ export function AvatarUpload({ onFileSelect, className }: AvatarUploadProps) {
         onChange={handleFileChange}
         accept="image/*"
         className="hidden"
+        disabled={disabled}
       />
 
-      {preview ? (
+      {displayImage ? (
         <div className="relative">
           <img
-            src={preview}
-            alt="Avatar preview"
+            src={displayImage}
+            alt="Avatar"
             className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-md"
           />
-          <button
-            onClick={handleRemove}
-            className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {!disabled && (
+            <button
+              onClick={handleRemove}
+              className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       ) : (
         <Button
           type="button"
           variant="outline"
           onClick={handleClick}
-          className="w-32 h-32 rounded-full border-2 border-dashed flex flex-col items-center justify-center gap-2"
+          disabled={disabled}
+          className={cn(
+            "w-32 h-32 rounded-full border-2 border-dashed flex flex-col items-center justify-center gap-2",
+            disabled && "opacity-50 cursor-not-allowed"
+          )}
         >
           <Upload className="w-6 h-6 text-gray-400" />
           <span className="text-sm text-gray-500">Ajouter une photo</span>

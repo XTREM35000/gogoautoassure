@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
 import { useAuthStore } from '@/store/authStore';
-import { supabase, UserRole, validatePhoneNumber, formatPhoneNumber } from '@/lib/supabase';
+import { supabase, validatePhoneNumber, formatPhoneNumber } from '@/lib/supabase';
 import { motion } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 export function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -16,7 +17,6 @@ export function RegisterPage() {
     phone: '',
     password: '',
     confirmPassword: '',
-    role: 'client' as UserRole
   });
   const [avatar, setAvatar] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -106,36 +106,33 @@ export function RegisterPage() {
         throw new Error('Ce numéro de téléphone est déjà utilisé');
       }
 
-      // 3. Créer l'utilisateur avec toutes les données nécessaires
+      // 3. Créer l'utilisateur avec le minimum d'informations
       console.log('Creating user...', {
         email: formData.email,
-        phone: formattedPhone,
-        display_name,
-        role: 'client'
       });
 
-      // Créer l'utilisateur avec le téléphone directement
+      // Créer l'utilisateur avec seulement email et mot de passe
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        phone: formattedPhone, // Ajouter le téléphone ici
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
-            display_name,
             first_name: formData.firstName,
             last_name: formData.lastName,
-            role: 'client',
-            phone: formattedPhone // Ajouter aussi dans les métadonnées
+            phone: formattedPhone,
+            display_name: display_name.trim()
           }
         }
       });
 
       if (signUpError) {
-        console.error('Signup error:', signUpError);
-        if (signUpError.message.includes('registered')) {
-          throw new Error('Cet email est déjà utilisé');
-        }
+        console.error('Detailed signup error:', {
+          message: signUpError.message,
+          status: signUpError.status,
+          name: signUpError.name,
+          stack: signUpError.stack
+        });
         throw signUpError;
       }
 
@@ -146,34 +143,39 @@ export function RegisterPage() {
 
       console.log('User created:', authData.user.id);
 
-      // 4. Créer le profil avec le téléphone
+      // 4. Créer le profil complet
       const now = new Date().toISOString();
+
       const profileData = {
         id: authData.user.id,
         email: formData.email,
         first_name: formData.firstName,
         last_name: formData.lastName,
         phone: formattedPhone,
-        role: 'client',
         created_at: now,
         updated_at: now,
         avatar_url: null,
         agency_id: null,
         permissions: [],
-        status: 'pending',
-        display_name
+        status: 'active',
+        display_name: display_name.trim() || `${formData.firstName} ${formData.lastName}`.trim()
       };
 
-      console.log('Creating profile...', profileData);
+      console.log('Creating profile with data:', profileData);
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert([profileData])
+        .upsert([profileData])
         .select()
         .single();
 
       if (profileError) {
-        console.error('Profile creation error:', profileError);
+        console.error('Detailed profile creation error:', {
+          message: profileError.message,
+          code: profileError.code,
+          details: profileError.details,
+          hint: profileError.hint
+        });
         // Supprimer l'utilisateur si la création du profil échoue
         const { error: deleteError } = await supabase.auth.admin.deleteUser(authData.user.id);
         if (deleteError) {
@@ -182,50 +184,23 @@ export function RegisterPage() {
         throw new Error('Erreur lors de la création du profil : ' + profileError.message);
       }
 
-      console.log('Profile created');
+      console.log('Profile created successfully');
 
-      // Essayer de mettre à jour le téléphone via la fonction RPC
-      try {
-        const { error: phoneUpdateError } = await supabase.rpc('update_user_phone', {
-          user_id: authData.user.id,
-          phone_number: formattedPhone
-        });
-
-        if (phoneUpdateError) {
-          console.error('Phone update error:', phoneUpdateError);
-          // Ne pas bloquer l'inscription si la mise à jour du téléphone échoue
-          console.warn('Failed to update phone number in auth.users');
-        }
-      } catch (error) {
-        console.error('Error calling update_user_phone RPC:', error);
-      }
-
-      // Upload avatar si présent
-      if (avatar) {
+      // 5. Upload avatar si présent
+      if (avatar && authData.user?.id) {
         try {
           console.log('Uploading avatar...', avatar);
 
-          // Vérifier si le bucket existe
-          const { data: buckets, error: bucketsError } = await supabase
-            .storage
-            .listBuckets();
-
-          if (bucketsError) {
-            throw new Error('Erreur lors de la vérification des buckets: ' + bucketsError.message);
-          }
-
-          const avatarBucket = buckets.find(b => b.name === 'avatars');
-          if (!avatarBucket) {
-            throw new Error('Le bucket "avatars" n\'existe pas');
-          }
+          // Attendre un peu pour s'assurer que le profil est bien créé
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
           // Créer un nom de fichier unique
           const fileExt = avatar.name.split('.').pop()?.toLowerCase() || 'jpg';
-          const fileName = `${authData.user.id}/${Date.now()}.${fileExt}`;
-          const filePath = `${fileName}`;
+          const fileName = `${authData.user.id}.${fileExt}`;
+          const filePath = `${authData.user.id}/${fileName}`;
 
           // Upload du fichier
-          const { error: uploadError, data: uploadData } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('avatars')
             .upload(filePath, avatar, {
               cacheControl: '3600',
@@ -237,8 +212,6 @@ export function RegisterPage() {
             console.error('Avatar upload error:', uploadError);
             throw new Error('Erreur lors de l\'upload de l\'avatar: ' + uploadError.message);
           }
-
-          console.log('Avatar uploaded successfully', uploadData);
 
           // Obtenir l'URL publique
           const { data: urlData } = supabase.storage
@@ -252,7 +225,7 @@ export function RegisterPage() {
           console.log('Avatar public URL:', urlData.publicUrl);
 
           // Mettre à jour le profil avec l'URL de l'avatar
-          const { error: updateError } = await supabase
+          const { error: updateAvatarError } = await supabase
             .from('profiles')
             .update({
               avatar_url: urlData.publicUrl,
@@ -260,8 +233,8 @@ export function RegisterPage() {
             })
             .eq('id', authData.user.id);
 
-          if (updateError) {
-            console.error('Error updating avatar URL in profile:', updateError);
+          if (updateAvatarError) {
+            console.error('Error updating avatar URL in profile:', updateAvatarError);
             throw new Error('Erreur lors de la mise à jour du profil avec l\'avatar');
           }
 
@@ -269,30 +242,18 @@ export function RegisterPage() {
         } catch (error) {
           console.error('Error in avatar upload process:', error);
           // Ne pas bloquer l'inscription si l'upload de l'avatar échoue
-          console.warn('Avatar upload failed, continuing without avatar');
+          toast.error('L\'avatar n\'a pas pu être uploadé, mais votre compte a été créé');
         }
       }
 
-      // Connexion automatique après l'inscription
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password
+      // Rediriger vers la page de vérification d'email
+      navigate('/verify-email', {
+        state: {
+          email: formData.email,
+          message: 'Vérifiez votre email pour activer votre compte'
+        }
       });
 
-      if (signInError) {
-        console.error('Auto sign-in error:', signInError);
-        // Rediriger vers la page de vérification d'email si la connexion automatique échoue
-        navigate('/verify-email', {
-          state: {
-            email: formData.email,
-            message: 'Vérifiez votre email pour activer votre compte'
-          }
-        });
-      } else {
-        // Rediriger vers le dashboard si la connexion automatique réussit
-        console.log('Auto sign-in successful, redirecting to dashboard...');
-        navigate('/dashboard');
-      }
     } catch (err: any) {
       console.error('Registration error:', err);
       if (err.message.includes('registered') || err.message.includes('already exists')) {

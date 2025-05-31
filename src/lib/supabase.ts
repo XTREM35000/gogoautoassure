@@ -17,7 +17,7 @@ const supabaseOptions = {
 
 export const supabase = createClient(supabaseUrl, supabaseKey, supabaseOptions);
 
-export type UserRole = 'client' | 'agent_junior' | 'agent_senior' | 'admin';
+export type UserStatus = 'pending' | 'active' | 'suspended' | 'blocked';
 
 export interface UserProfile {
   id: string;
@@ -25,9 +25,11 @@ export interface UserProfile {
   first_name: string;
   last_name: string;
   phone: string;
-  role: UserRole;
+  status: UserStatus;
+  display_name: string;
   avatar_url?: string;
   created_at: string;
+  updated_at: string;
   agency_id?: string;
   permissions?: string[];
 }
