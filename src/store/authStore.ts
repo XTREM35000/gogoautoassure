@@ -40,14 +40,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.log('Fetching user...');
       set({ isLoading: true, error: null });
 
+      // Vérifier d'abord la session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        set({ user: null, isLoading: false, error: null, initialized: true });
+        return;
+      }
+
+      if (!session) {
+        console.log('No active session');
+        set({ user: null, isLoading: false, error: null, initialized: true });
+        return;
+      }
+
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
 
       if (authError) {
         console.error('Auth error:', authError);
-        throw authError;
+        set({ user: null, isLoading: false, error: 'Erreur d\'authentification', initialized: true });
+        return;
       }
-
-      console.log('Auth user:', authUser?.id);
 
       if (!authUser) {
         console.log('No auth user found');
@@ -63,12 +77,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (profileError) {
         console.error('Profile error:', profileError);
-        throw new Error('Impossible de charger le profil utilisateur');
+        set({
+          user: null,
+          isLoading: false,
+          error: 'Impossible de charger le profil utilisateur',
+          initialized: true
+        });
+        return;
       }
 
       if (!validateUserProfile(profile)) {
         console.error('Invalid profile:', profile);
-        throw new Error('Profil utilisateur invalide ou incomplet');
+        set({
+          user: null,
+          isLoading: false,
+          error: 'Profil utilisateur invalide ou incomplet',
+          initialized: true
+        });
+        return;
       }
 
       console.log('Profile loaded:', profile.id, profile.role);
@@ -90,13 +116,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true, error: null });
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      set({ user: null, isLoading: false, error: null });
+      set({ user: null, isLoading: false, error: null, initialized: true });
       console.log('Logged out successfully');
     } catch (error) {
       console.error('Logout error:', error);
       set({
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Erreur lors de la déconnexion'
+        error: error instanceof Error ? error.message : 'Erreur lors de la déconnexion',
+        initialized: true
       });
     }
   }
@@ -112,7 +139,7 @@ supabase.auth.onAuthStateChange((event, session) => {
 
   if (event === 'SIGNED_OUT') {
     console.log('User signed out');
-    useAuthStore.setState({ user: null, isLoading: false, error: null });
+    useAuthStore.setState({ user: null, isLoading: false, error: null, initialized: true });
   } else if (session?.user) {
     console.log('Session found, fetching user...');
     useAuthStore.getState().fetchUser();

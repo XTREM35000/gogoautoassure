@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Settings, LogOut } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,15 +64,12 @@ export function UserAvatarMenu() {
           whileTap={{ scale: 0.95 }}
           className="flex items-center gap-2 p-1 rounded-full outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2"
         >
-          <Avatar>
-            {user.avatar_url ? (
-              <AvatarImage src={user.avatar_url} alt={user.first_name} />
-            ) : (
-              <AvatarFallback className="bg-orange-100 text-orange-600">
-                {getInitials(`${user.first_name} ${user.last_name}`)}
-              </AvatarFallback>
-            )}
-          </Avatar>
+          <Avatar
+            src={user.avatar_url}
+            alt={user.first_name}
+            fallbackText={`${user.first_name} ${user.last_name}`}
+            className="bg-orange-100 text-orange-600"
+          />
           <div className="hidden md:block text-left">
             <p className="text-sm font-medium">{`${user.first_name} ${user.last_name}`}</p>
             <p className="text-xs text-gray-500 capitalize">{formatRole(user.role)}</p>

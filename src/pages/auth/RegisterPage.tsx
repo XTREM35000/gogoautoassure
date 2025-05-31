@@ -8,13 +8,6 @@ import { useAuthStore } from '@/store/authStore';
 import { supabase, UserRole, validatePhoneNumber, formatPhoneNumber } from '@/lib/supabase';
 import { motion } from 'framer-motion';
 
-const roleOptions: { value: UserRole; label: string }[] = [
-  { value: 'client', label: 'Client' },
-  { value: 'agent_junior', label: 'Agent Junior' },
-  { value: 'agent_senior', label: 'Agent Senior' },
-  { value: 'admin', label: 'Administrateur' }
-];
-
 export function RegisterPage() {
   const [formData, setFormData] = useState({
     firstName: '',
@@ -74,6 +67,8 @@ export function RegisterPage() {
     }
 
     const formattedPhone = formatPhoneNumber(formData.phone);
+    const display_name = `${formData.firstName} ${formData.lastName}`.trim();
+
     console.log('Formatted phone:', formattedPhone);
 
     try {
@@ -111,34 +106,34 @@ export function RegisterPage() {
         throw new Error('Ce numéro de téléphone est déjà utilisé');
       }
 
-      // 3. Créer l'utilisateur
+      // 3. Créer l'utilisateur avec toutes les données nécessaires
       console.log('Creating user...', {
         email: formData.email,
-        metadata: {
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone: formattedPhone,
-          role: formData.role
-        }
+        phone: formattedPhone,
+        display_name,
+        role: 'client'
       });
 
+      // Créer l'utilisateur avec le téléphone directement
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        phone: formattedPhone, // Ajouter le téléphone ici
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
+            display_name,
             first_name: formData.firstName,
             last_name: formData.lastName,
-            phone: formattedPhone,
-            role: formData.role
+            role: 'client',
+            phone: formattedPhone // Ajouter aussi dans les métadonnées
           }
         }
       });
 
       if (signUpError) {
         console.error('Signup error:', signUpError);
-        if (signUpError.message.includes('unique constraint')) {
+        if (signUpError.message.includes('registered')) {
           throw new Error('Cet email est déjà utilisé');
         }
         throw signUpError;
@@ -151,80 +146,159 @@ export function RegisterPage() {
 
       console.log('User created:', authData.user.id);
 
-      // 4. Créer le profil
-      console.log('Creating profile...', {
+      // 4. Créer le profil avec le téléphone
+      const now = new Date().toISOString();
+      const profileData = {
         id: authData.user.id,
+        email: formData.email,
         first_name: formData.firstName,
         last_name: formData.lastName,
         phone: formattedPhone,
-        role: formData.role,
-        email: formData.email
-      });
+        role: 'client',
+        created_at: now,
+        updated_at: now,
+        avatar_url: null,
+        agency_id: null,
+        permissions: [],
+        status: 'pending',
+        display_name
+      };
+
+      console.log('Creating profile...', profileData);
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert({
-          id: authData.user.id,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone: formattedPhone,
-          role: formData.role,
-          email: formData.email,
-          created_at: new Date().toISOString()
-        });
+        .insert([profileData])
+        .select()
+        .single();
 
       if (profileError) {
         console.error('Profile creation error:', profileError);
         // Supprimer l'utilisateur si la création du profil échoue
-        await supabase.auth.admin.deleteUser(authData.user.id);
-        throw profileError;
+        const { error: deleteError } = await supabase.auth.admin.deleteUser(authData.user.id);
+        if (deleteError) {
+          console.error('Error deleting user after profile creation failed:', deleteError);
+        }
+        throw new Error('Erreur lors de la création du profil : ' + profileError.message);
       }
 
       console.log('Profile created');
 
-      // 5. Upload avatar si présent
+      // Essayer de mettre à jour le téléphone via la fonction RPC
+      try {
+        const { error: phoneUpdateError } = await supabase.rpc('update_user_phone', {
+          user_id: authData.user.id,
+          phone_number: formattedPhone
+        });
+
+        if (phoneUpdateError) {
+          console.error('Phone update error:', phoneUpdateError);
+          // Ne pas bloquer l'inscription si la mise à jour du téléphone échoue
+          console.warn('Failed to update phone number in auth.users');
+        }
+      } catch (error) {
+        console.error('Error calling update_user_phone RPC:', error);
+      }
+
+      // Upload avatar si présent
       if (avatar) {
-        console.log('Uploading avatar...');
-        const fileExt = avatar.name.split('.').pop();
-        const fileName = `${authData.user.id}-${Math.random()}.${fileExt}`;
-        const filePath = `avatars/${fileName}`;
+        try {
+          console.log('Uploading avatar...', avatar);
 
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(filePath, avatar);
+          // Vérifier si le bucket existe
+          const { data: buckets, error: bucketsError } = await supabase
+            .storage
+            .listBuckets();
 
-        if (uploadError) {
-          console.error('Avatar upload error:', uploadError);
-          // Ne pas bloquer l'inscription si l'upload de l'avatar échoue
-          console.warn('Avatar upload failed, continuing without avatar');
-        } else {
-          console.log('Avatar uploaded');
+          if (bucketsError) {
+            throw new Error('Erreur lors de la vérification des buckets: ' + bucketsError.message);
+          }
+
+          const avatarBucket = buckets.find(b => b.name === 'avatars');
+          if (!avatarBucket) {
+            throw new Error('Le bucket "avatars" n\'existe pas');
+          }
+
+          // Créer un nom de fichier unique
+          const fileExt = avatar.name.split('.').pop()?.toLowerCase() || 'jpg';
+          const fileName = `${authData.user.id}/${Date.now()}.${fileExt}`;
+          const filePath = `${fileName}`;
+
+          // Upload du fichier
+          const { error: uploadError, data: uploadData } = await supabase.storage
+            .from('avatars')
+            .upload(filePath, avatar, {
+              cacheControl: '3600',
+              upsert: true,
+              contentType: `image/${fileExt}`
+            });
+
+          if (uploadError) {
+            console.error('Avatar upload error:', uploadError);
+            throw new Error('Erreur lors de l\'upload de l\'avatar: ' + uploadError.message);
+          }
+
+          console.log('Avatar uploaded successfully', uploadData);
+
+          // Obtenir l'URL publique
           const { data: urlData } = supabase.storage
             .from('avatars')
             .getPublicUrl(filePath);
 
-          await supabase
+          if (!urlData?.publicUrl) {
+            throw new Error('Impossible d\'obtenir l\'URL publique de l\'avatar');
+          }
+
+          console.log('Avatar public URL:', urlData.publicUrl);
+
+          // Mettre à jour le profil avec l'URL de l'avatar
+          const { error: updateError } = await supabase
             .from('profiles')
-            .update({ avatar_url: urlData.publicUrl })
+            .update({
+              avatar_url: urlData.publicUrl,
+              updated_at: new Date().toISOString()
+            })
             .eq('id', authData.user.id);
 
-          console.log('Avatar URL updated in profile');
+          if (updateError) {
+            console.error('Error updating avatar URL in profile:', updateError);
+            throw new Error('Erreur lors de la mise à jour du profil avec l\'avatar');
+          }
+
+          console.log('Avatar URL updated in profile successfully');
+        } catch (error) {
+          console.error('Error in avatar upload process:', error);
+          // Ne pas bloquer l'inscription si l'upload de l'avatar échoue
+          console.warn('Avatar upload failed, continuing without avatar');
         }
       }
 
-      console.log('Registration successful, redirecting...');
-      navigate('/verify-email', {
-        state: {
-          email: formData.email,
-          message: 'Vérifiez votre email pour activer votre compte'
-        }
+      // Connexion automatique après l'inscription
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
       });
+
+      if (signInError) {
+        console.error('Auto sign-in error:', signInError);
+        // Rediriger vers la page de vérification d'email si la connexion automatique échoue
+        navigate('/verify-email', {
+          state: {
+            email: formData.email,
+            message: 'Vérifiez votre email pour activer votre compte'
+          }
+        });
+      } else {
+        // Rediriger vers le dashboard si la connexion automatique réussit
+        console.log('Auto sign-in successful, redirecting to dashboard...');
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       console.error('Registration error:', err);
-      if (err.message.includes('already registered') || err.message.includes('already exists')) {
+      if (err.message.includes('registered') || err.message.includes('already exists')) {
         setFormError('Cet email est déjà utilisé');
-      } else if (err.message.includes('phone number')) {
-        setFormError('Ce numéro de téléphone est déjà utilisé');
+      } else if (err.message.includes('phone')) {
+        setFormError('Format de téléphone invalide ou déjà utilisé');
       } else {
         setFormError(err.message || 'Une erreur est survenue lors de l\'inscription');
       }
@@ -335,27 +409,6 @@ export function RegisterPage() {
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="+225 XX XX XX XX XX"
                 />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                Rôle
-              </label>
-              <div className="mt-1">
-                <select
-                  id="role"
-                  name="role"
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                  className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {roleOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
 

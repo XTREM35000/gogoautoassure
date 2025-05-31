@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  Search, 
-  Plus, 
-  Filter, 
+import {
+  Search,
+  Plus,
+  Filter,
   User,
   Phone,
   Mail,
@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar } from '@/components/ui/avatar';
 import { formatDate } from '@/lib/utils';
 import { UserRole } from '@/lib/supabase';
 
@@ -63,14 +63,14 @@ const mockAgents = [
 
 export function AgentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  
-  const filteredAgents = mockAgents.filter(agent => 
+
+  const filteredAgents = mockAgents.filter(agent =>
     agent.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     agent.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     agent.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     agent.phone.includes(searchTerm)
   );
-  
+
   const getInitials = (firstName: string, lastName: string) => {
     return `${firstName[0]}${lastName[0]}`.toUpperCase();
   };
@@ -85,7 +85,7 @@ export function AgentsPage() {
         return role;
     }
   };
-  
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -100,7 +100,7 @@ export function AgentsPage() {
           Nouvel agent
         </Button>
       </div>
-      
+
       <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
@@ -137,12 +137,12 @@ export function AgentsPage() {
           </CardContent>
         </Card>
       </div>
-      
+
       <div className="flex flex-col gap-4 md:flex-row">
         <div className="relative w-full md:w-64">
           <Search className="absolute top-0 left-3 h-full text-gray-400" size={18} />
-          <Input 
-            placeholder="Rechercher un agent..." 
+          <Input
+            placeholder="Rechercher un agent..."
             className="pl-10"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -153,7 +153,7 @@ export function AgentsPage() {
           Filtrer
         </Button>
       </div>
-      
+
       <Card>
         <CardHeader>
           <CardTitle>Liste des agents</CardTitle>
@@ -161,27 +161,24 @@ export function AgentsPage() {
         <CardContent>
           <div className="space-y-4">
             {filteredAgents.map((agent) => (
-              <div 
+              <div
                 key={agent.id}
                 className="flex items-center justify-between p-4 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <Avatar className="h-12 w-12">
-                    {agent.avatar_url ? (
-                      <AvatarImage src={agent.avatar_url} alt={`${agent.first_name} ${agent.last_name}`} />
-                    ) : (
-                      <AvatarFallback className="bg-orange-100 text-orange-600">
-                        {getInitials(agent.first_name, agent.last_name)}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  
+                  <Avatar
+                    src={agent.avatar_url}
+                    alt={`${agent.first_name} ${agent.last_name}`}
+                    fallbackText={`${agent.first_name} ${agent.last_name}`}
+                    className="h-12 w-12 bg-orange-100 text-orange-600"
+                  />
+
                   <div className="grid grid-cols-2 gap-x-12 gap-y-2">
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{`${agent.first_name} ${agent.last_name}`}</p>
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                          agent.role === 'agent_senior' 
+                          agent.role === 'agent_senior'
                             ? 'bg-orange-100 text-orange-800'
                             : 'bg-teal-100 text-teal-800'
                         }`}>
@@ -199,24 +196,24 @@ export function AgentsPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Phone size={14} />
                       <span>{agent.phone}</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Mail size={14} />
                       <span>{agent.email}</span>
                     </div>
-                    
+
                     <div className="flex items-center gap-2 text-sm text-gray-500">
                       <Calendar size={14} />
                       <span>Agent depuis le {formatDate(agent.created_at)}</span>
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm">
                     Voir détails

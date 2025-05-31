@@ -35,12 +35,12 @@ export interface UserProfile {
 export const formatPhoneNumber = (phone: string): string => {
   // Remove any non-digit characters
   const digits = phone.replace(/\D/g, '');
-  
+
   // If it already includes the country code
   if (digits.startsWith('225')) {
     return `+${digits}`;
   }
-  
+
   // Add the country code if not present
   return `+225${digits}`;
 };
