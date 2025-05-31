@@ -1,24 +1,69 @@
 import React, { useState } from 'react';
-import { User, Phone, Mail, Camera } from 'lucide-react';
+import { User, Phone, Mail, Camera, Loader2, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
 import { useAuthStore } from '@/store/authStore';
-import { supabase } from '@/lib/supabase';
+import { supabase, getFullName, uploadAvatar } from '@/lib/supabase';
 import { motion } from 'framer-motion';
+import { Avatar } from '@/components/ui/avatar';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 
 export function ProfilePage() {
   const { user } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: user?.first_name || '',
     lastName: user?.last_name || '',
     email: user?.email || '',
     phone: user?.phone || '',
   });
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Vérifier le type de fichier
+    if (!file.type.startsWith('image/')) {
+      toast.error('Le fichier doit être une image');
+      return;
+    }
+
+    // Vérifier la taille du fichier (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('L\'image ne doit pas dépasser 5MB');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const avatarUrl = await uploadAvatar(file, user.id);
+
+      if (avatarUrl) {
+        // Mettre à jour le profil avec la nouvelle URL
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ avatar_url: avatarUrl })
+          .eq('id', user.id);
+
+        if (updateError) throw updateError;
+
+        // Recharger les données utilisateur
+        await useAuthStore.getState().fetchUser();
+        toast.success('Avatar mis à jour avec succès');
+      }
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      toast.error('Erreur lors de la mise à jour de l\'avatar');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,8 +95,9 @@ export function ProfilePage() {
       }
 
       // Rafraîchir les données utilisateur
-      useAuthStore.getState().fetchUser();
-    setIsEditing(false);
+      await useAuthStore.getState().fetchUser();
+      setIsEditing(false);
+      toast.success('Profil mis à jour avec succès');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
@@ -78,9 +124,32 @@ export function ProfilePage() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="flex justify-center mb-6">
-                <AvatarUpload
-                  onFileSelect={(file) => console.log('Avatar updated:', file)}
-                />
+                <div className="relative">
+                  <Avatar
+                    src={user.avatar_url}
+                    fallbackText={getFullName(user)}
+                    size="lg"
+                    className="border-4 border-orange-100"
+                  />
+                  <label
+                    htmlFor="avatar-upload"
+                    className="absolute bottom-0 right-0 p-1 rounded-full bg-orange-500 text-white cursor-pointer hover:bg-orange-600 transition-colors"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Upload className="h-5 w-5" />
+                    )}
+                  </label>
+                  <input
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                    disabled={isUploading}
+                  />
+                </div>
               </div>
 
               <div className="space-y-4">

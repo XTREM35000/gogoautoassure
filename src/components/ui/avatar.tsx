@@ -1,48 +1,73 @@
-import * as React from "react";
-import * as AvatarPrimitive from "@radix-ui/react-avatar";
+import React from 'react';
+import { cn } from '@/lib/utils';
 
-import { cn } from "@/lib/utils";
+interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
+  src?: string | null;
+  alt?: string;
+  fallbackText?: string;
+  size?: 'sm' | 'md' | 'lg';
+}
 
-const Avatar = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Root
-    ref={ref}
-    className={cn(
-      "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
-      className
-    )}
-    {...props}
-  />
-));
-Avatar.displayName = AvatarPrimitive.Root.displayName;
+const sizeClasses = {
+  sm: 'h-8 w-8 text-xs',
+  md: 'h-12 w-12 text-sm',
+  lg: 'h-24 w-24 text-xl'
+};
 
-const AvatarImage = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Image>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image
-    ref={ref}
-    className={cn("aspect-square h-full w-full", className)}
-    {...props}
-  />
-));
-AvatarImage.displayName = AvatarPrimitive.Image.displayName;
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
 
-const AvatarFallback = React.forwardRef<
-  React.ElementRef<typeof AvatarPrimitive.Fallback>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Fallback>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Fallback
-    ref={ref}
-    className={cn(
-      "flex h-full w-full items-center justify-center rounded-full bg-gray-100 text-gray-800",
-      className
-    )}
-    {...props}
-  />
-));
-AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName;
+const generateHSL = (text: string) => {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = text.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = hash % 360;
+  return `hsl(${h}, 70%, 60%)`;
+};
 
-export { Avatar, AvatarImage, AvatarFallback };
+export function Avatar({
+  src,
+  alt = '',
+  fallbackText = '',
+  size = 'md',
+  className,
+  ...props
+}: AvatarProps) {
+  const [error, setError] = React.useState(false);
+  const initials = getInitials(fallbackText || alt);
+  const backgroundColor = generateHSL(fallbackText || alt);
+
+  return (
+    <div
+      className={cn(
+        'relative inline-flex items-center justify-center rounded-full bg-gray-100 overflow-hidden',
+        sizeClasses[size],
+        className
+      )}
+      {...props}
+    >
+      {src && !error ? (
+        <img
+          src={src}
+          alt={alt}
+          className="h-full w-full object-cover"
+          onError={() => setError(true)}
+        />
+      ) : (
+        <div
+          className="flex items-center justify-center w-full h-full font-medium text-white"
+          style={{ backgroundColor }}
+        >
+          {initials}
+        </div>
+      )}
+    </div>
+  );
+}
