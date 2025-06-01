@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Search,
   Plus,
@@ -15,27 +15,27 @@ import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
 import { formatDate } from '@/lib/utils';
 
-// Mock data
+// Mock data with profile images
 const mockClients = [
   {
     id: '1',
-    first_name: 'Kouamé',
-    last_name: 'Koffi',
-    email: 'kouame.koffi@email.com',
-    phone: '+225 07 07 07 07 07',
+    first_name: 'Gogo',
+    last_name: 'Fabrice',
+    email: 'fgogo@email.com',
+    phone: '+225 07 58 33 72 79',
     created_at: '2023-01-15T00:00:00Z',
     contracts_count: 2,
-    avatar_url: null
+    avatar_url: '/clients/client1.png'
   },
   {
     id: '2',
-    first_name: 'Aminata',
+    first_name: 'Dramne',
     last_name: 'Diallo',
-    email: 'aminata.diallo@email.com',
+    email: 'dramne.diallo@email.com',
     phone: '+225 01 01 01 01 01',
     created_at: '2023-03-20T00:00:00Z',
     contracts_count: 1,
-    avatar_url: null
+    avatar_url: '/clients/client2.png'
   },
   {
     id: '3',
@@ -45,7 +45,7 @@ const mockClients = [
     phone: '+225 05 05 05 05 05',
     created_at: '2023-06-10T00:00:00Z',
     contracts_count: 3,
-    avatar_url: null
+    avatar_url: '/clients/client3.png'
   }
 ];
 
@@ -106,12 +106,19 @@ export function ClientsPage() {
                 className="flex items-center justify-between p-4 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <Avatar
-                    src={client.avatar_url}
-                    alt={`${client.first_name} ${client.last_name}`}
-                    fallbackText={`${client.first_name} ${client.last_name}`}
-                    className="h-12 w-12 bg-orange-100 text-orange-600"
-                  />
+                  <Avatar className="h-12 w-12">
+                    {client.avatar_url ? (
+                      <Avatar.Image
+                        src={client.avatar_url}
+                        alt={`${client.first_name} ${client.last_name}`}
+                        className="object-cover"
+                      />
+                    ) : (
+                      <Avatar.Fallback className="bg-orange-100 text-orange-600">
+                        {getInitials(client.first_name, client.last_name)}
+                      </Avatar.Fallback>
+                    )}
+                  </Avatar>
 
                   <div className="grid grid-cols-2 gap-x-12 gap-y-2">
                     <div>

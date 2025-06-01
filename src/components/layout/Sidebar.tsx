@@ -7,7 +7,8 @@ import {
   Settings,
   Bell,
   Menu,
-  X
+  X,
+  UserCog
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -37,6 +38,8 @@ const getIcon = (iconName: string) => {
       return <Settings className="w-5 h-5" />;
     case 'notifications':
       return <Bell className="w-5 h-5" />;
+    case 'agents':
+      return <UserCog className="w-5 h-5" />;
     default:
       return null;
   }

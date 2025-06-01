@@ -27,24 +27,24 @@
   }
 
   .dark {
-    --background: 220 20% 15%;
+    --background: 220 20% 18%;
     --foreground: 210 40% 98%;
-    --card: 220 20% 15%;
+    --card: 220 20% 22%;
     --card-foreground: 210 40% 98%;
-    --popover: 220 20% 15%;
+    --popover: 220 20% 22%;
     --popover-foreground: 210 40% 98%;
     --primary: 24 96% 53%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 20%;
+    --secondary: 220 20% 24%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 20%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 20%;
+    --muted: 220 20% 24%;
+    --muted-foreground: 215 20.2% 75%;
+    --accent: 220 20% 24%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 20%;
-    --input: 217.2 32.6% 20%;
+    --border: 220 20% 24%;
+    --input: 220 20% 24%;
     --ring: 24 96% 53%;
   }
 }
@@ -56,4 +56,45 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Amélioration de la lisibilité des textes en mode sombre */
+.dark {
+  color-scheme: dark;
+}
+
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  color: hsl(210 40% 98%);
+}
+
+.dark p, .dark span, .dark div {
+  color: hsl(215 20.2% 85%);
+}
+
+.dark .text-gray-500 {
+  color: hsl(215 20.2% 75%);
+}
+
+.dark .text-gray-400 {
+  color: hsl(215 20.2% 65%);
+}
+
+/* Amélioration des cartes en mode sombre */
+.dark .bg-white {
+  background-color: hsl(220 20% 22%);
+}
+
+.dark .border-gray-200 {
+  border-color: hsl(220 20% 24%);
+}
+
+/* Amélioration des inputs en mode sombre */
+.dark input, .dark select, .dark textarea {
+  background-color: hsl(220 20% 20%);
+  border-color: hsl(220 20% 24%);
+}
+
+.dark input:focus, .dark select:focus, .dark textarea:focus {
+  border-color: hsl(24 96% 53%);
+  ring-color: hsl(24 96% 53% / 0.2);
 }

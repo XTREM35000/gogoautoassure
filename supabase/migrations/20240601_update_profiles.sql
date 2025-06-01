@@ -1,6 +1,101 @@
 -- Désactiver temporairement les contraintes de clé étrangère
 SET session_replication_role = 'replica';
 
+-- Créer le type de rôle d'abord
+DROP TYPE IF EXISTS user_role CASCADE;
+CREATE TYPE user_role AS ENUM ('admin', 'agent', 'user');
+
+-- Ajouter la colonne role à la table profiles
+ALTER TABLE profiles
+DROP COLUMN IF EXISTS role CASCADE;
+
+ALTER TABLE profiles
+ADD COLUMN role user_role NOT NULL DEFAULT 'user';
+
+-- Créer une table pour les permissions
+CREATE TABLE IF NOT EXISTS permissions (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  description TEXT
+);
+
+-- Insérer les permissions de base
+INSERT INTO permissions (name, description) VALUES
+  ('manage_system', 'Gérer les paramètres système'),
+  ('manage_agents', 'Gérer les agents'),
+  ('manage_clients', 'Gérer les clients'),
+  ('manage_contracts', 'Gérer les contrats'),
+  ('view_contracts', 'Voir les contrats')
+ON CONFLICT (name) DO NOTHING;
+
+-- Créer une table de liaison pour les rôles et permissions
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role user_role NOT NULL,
+  permission_id INTEGER REFERENCES permissions(id),
+  PRIMARY KEY (role, permission_id)
+);
+
+-- Insérer les permissions par défaut pour chaque rôle
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'admin', id FROM permissions;
+
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'agent', id FROM permissions
+WHERE name IN ('manage_clients', 'manage_contracts');
+
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'user', id FROM permissions
+WHERE name IN ('view_contracts');
+
+-- Supprimer les anciennes politiques
+DROP POLICY IF EXISTS "Politique de lecture des profils" ON profiles;
+DROP POLICY IF EXISTS "Politique de mise à jour des profils" ON profiles;
+DROP POLICY IF EXISTS "Politique d'insertion des profils" ON profiles;
+DROP POLICY IF EXISTS "Politique de suppression des profils" ON profiles;
+
+-- Activer RLS
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Nouvelle politique de lecture simplifiée
+CREATE POLICY "enable_read_access_for_all_users"
+ON profiles FOR SELECT
+TO authenticated
+USING (true);
+
+-- Politique d'insertion simplifiée
+CREATE POLICY "enable_insert_for_authenticated"
+ON profiles FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = id);
+
+-- Politique de mise à jour simplifiée
+CREATE POLICY "enable_update_for_own_profile"
+ON profiles FOR UPDATE
+TO authenticated
+USING (auth.uid() = id OR role = 'admin');
+
+-- Politique de suppression simplifiée
+CREATE POLICY "enable_delete_for_admins"
+ON profiles FOR DELETE
+TO authenticated
+USING (role = 'admin');
+
+-- Fonction pour obtenir les permissions d'un utilisateur
+CREATE OR REPLACE FUNCTION get_user_permissions(user_id UUID)
+RETURNS TABLE (permission VARCHAR) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT p.name
+  FROM profiles pr
+  JOIN role_permissions rp ON pr.role = rp.role
+  JOIN permissions p ON rp.permission_id = p.id
+  WHERE pr.id = user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Réactiver les contraintes de clé étrangère
+SET session_replication_role = 'origin';
+
 -- 1. Supprimer les contraintes existantes sur status
 ALTER TABLE public.profiles
 DROP CONSTRAINT IF EXISTS profiles_status_check1,
@@ -60,9 +155,6 @@ ALTER COLUMN status SET NOT NULL,
 ALTER COLUMN status SET DEFAULT 'pending',
 ADD CONSTRAINT valid_status CHECK (status IN ('pending', 'active', 'suspended', 'blocked')),
 ALTER COLUMN display_name SET NOT NULL;
-
--- Réactiver les contraintes de clé étrangère
-SET session_replication_role = 'origin';
 
 -- Mettre à jour la fonction de réinitialisation de la base de données
 CREATE OR REPLACE FUNCTION reset_database()

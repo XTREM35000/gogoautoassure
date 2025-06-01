@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
 // Enable debug mode in development
 const supabaseOptions = {
   auth: {
@@ -12,12 +16,23 @@ const supabaseOptions = {
   },
   db: {
     schema: 'public'
+  },
+  logger: {
+    level: 'debug',
+    native: true
   }
 };
 
 export const supabase = createClient(supabaseUrl, supabaseKey, supabaseOptions);
 
 export type UserStatus = 'pending' | 'active' | 'suspended' | 'blocked';
+export type UserRole = 'admin' | 'agent' | 'user';
+
+export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
+  admin: ['manage_system', 'manage_agents', 'manage_clients', 'manage_contracts'],
+  agent: ['manage_clients', 'manage_contracts'],
+  user: ['view_contracts']
+};
 
 export interface UserProfile {
   id: string;
@@ -26,6 +41,7 @@ export interface UserProfile {
   last_name: string;
   phone: string;
   status: UserStatus;
+  role: UserRole;
   display_name: string;
   avatar_url?: string;
   created_at: string;

@@ -31,83 +31,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialized: false,
 
   fetchUser: async () => {
+    console.log('Fetching user...');
     try {
-      // Si déjà en cours de chargement et initialisé, ne pas refaire la requête
-      if (get().isLoading && get().initialized) {
-        console.log('Fetch user skipped - already loading');
-        return;
-      }
-
-      console.log('Fetching user...');
-      set({ isLoading: true, error: null });
-
-      // Vérifier d'abord la session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        console.error('Session error:', sessionError);
-        set({ user: null, isLoading: false, error: null, initialized: true });
-        return;
-      }
-
-      if (!session) {
-        console.log('No active session');
-        set({ user: null, isLoading: false, error: null, initialized: true });
-        return;
-      }
-
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-
-      if (authError) {
-        console.error('Auth error:', authError);
-        set({ user: null, isLoading: false, error: 'Erreur d\'authentification', initialized: true });
-        return;
-      }
+      const { data: { user: authUser } } = await supabase.auth.getUser();
 
       if (!authUser) {
         console.log('No auth user found');
-        set({ user: null, isLoading: false, error: null, initialized: true });
+        set({ user: null, error: null });
         return;
       }
 
+      // Utiliser la vue sécurisée au lieu de la table profiles
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('secure_profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
 
       if (profileError) {
         console.error('Profile error:', profileError);
-        set({
-          user: null,
-          isLoading: false,
-          error: 'Impossible de charger le profil utilisateur',
-          initialized: true
-        });
+        // Ne pas bloquer la connexion si le profil n'est pas trouvé
+        const defaultProfile: UserProfile = {
+          id: authUser.id,
+          email: authUser.email || '',
+          first_name: authUser.user_metadata?.first_name || '',
+          last_name: authUser.user_metadata?.last_name || '',
+          phone: authUser.user_metadata?.phone || '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          avatar_url: '',
+          role: 'user',
+          status: 'active',
+          display_name: authUser.user_metadata?.display_name || '',
+          permissions: ['manage_clients']
+        };
+        set({ user: defaultProfile, error: null });
         return;
       }
 
-      if (!validateUserProfile(profile)) {
-        console.error('Invalid profile:', profile);
-        set({
-          user: null,
-          isLoading: false,
-          error: 'Profil utilisateur invalide ou incomplet',
-          initialized: true
-        });
-        return;
-      }
-
-      console.log('Profile loaded:', profile.id, profile.status);
-      set({ user: profile, isLoading: false, error: null, initialized: true });
+      set({ user: profile, error: null });
     } catch (error) {
       console.error('Error in fetchUser:', error);
-      set({
-        user: null,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Une erreur est survenue lors du chargement du profil',
-        initialized: true
-      });
+      set({ user: null, error: 'Failed to fetch user' });
     }
   },
 

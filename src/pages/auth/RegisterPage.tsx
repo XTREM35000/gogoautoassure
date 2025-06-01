@@ -72,44 +72,7 @@ export function RegisterPage() {
     console.log('Formatted phone:', formattedPhone);
 
     try {
-      // 1. Vérifier si l'email existe déjà
-      console.log('Checking if email exists...');
-      const { data: existingUsers, error: emailCheckError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', formData.email);
-
-      if (emailCheckError) {
-        console.error('Email check error:', emailCheckError);
-        throw new Error('Erreur lors de la vérification de l\'email');
-      }
-
-      if (existingUsers && existingUsers.length > 0) {
-        console.log('Email already exists');
-        throw new Error('Cet email est déjà utilisé');
-      }
-
-      // 2. Vérifier si le téléphone existe déjà
-      console.log('Checking if phone exists...');
-      const { data: existingPhones, error: phoneCheckError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('phone', formattedPhone);
-
-      if (phoneCheckError) {
-        console.error('Phone check error:', phoneCheckError);
-        throw new Error('Erreur lors de la vérification du numéro de téléphone');
-      }
-
-      if (existingPhones && existingPhones.length > 0) {
-        console.log('Phone already exists');
-        throw new Error('Ce numéro de téléphone est déjà utilisé');
-      }
-
-      // 3. Créer l'utilisateur avec le minimum d'informations
-      console.log('Creating user...', {
-        email: formData.email,
-      });
+      console.log('1. Début du processus d\'inscription');
 
       // Créer l'utilisateur avec seulement email et mot de passe
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
@@ -127,25 +90,41 @@ export function RegisterPage() {
       });
 
       if (signUpError) {
-        console.error('Detailed signup error:', {
-          message: signUpError.message,
-          status: signUpError.status,
-          name: signUpError.name,
-          stack: signUpError.stack
-        });
+        console.error('2. Erreur lors de la création du compte auth:', signUpError);
         throw signUpError;
       }
 
       if (!authData.user) {
-        console.error('No user data returned');
+        console.error('2. Pas de données utilisateur retournées');
         throw new Error('Erreur lors de la création du compte');
       }
 
-      console.log('User created:', authData.user.id);
+      console.log('2. Utilisateur auth créé avec succès:', authData.user.id);
 
-      // 4. Créer le profil complet
+      // Attendre un peu pour laisser le temps à auth de se propager
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Vérifier si c'est le premier utilisateur
+      console.log('3. Vérification si premier utilisateur');
+      let isFirstUser = false;
+
+      // Utiliser une requête directe pour vérifier s'il y a des profils
+      const { count, error: countError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+
+      if (countError) {
+        console.error('3. Erreur lors du comptage des profils:', countError);
+        // Par défaut, considérer comme non premier utilisateur en cas d'erreur
+        isFirstUser = false;
+      } else {
+        isFirstUser = count === 0;
+      }
+
+      console.log('3. Premier utilisateur:', isFirstUser);
+
+      // Créer le profil
       const now = new Date().toISOString();
-
       const profileData = {
         id: authData.user.id,
         email: formData.email,
@@ -155,107 +134,103 @@ export function RegisterPage() {
         created_at: now,
         updated_at: now,
         avatar_url: null,
-        agency_id: null,
-        permissions: [],
+        role: isFirstUser ? 'admin' : 'user',
         status: 'active',
-        display_name: display_name.trim() || `${formData.firstName} ${formData.lastName}`.trim()
+        display_name: display_name.trim(),
+        permissions: isFirstUser ? ['manage_system', 'manage_clients', 'manage_contracts'] : ['manage_clients']
       };
 
-      console.log('Creating profile with data:', profileData);
+      console.log('4. Tentative de création du profil:', profileData);
 
-      const { error: profileError } = await supabase
+      // Utiliser upsert au lieu de insert pour éviter les conflits
+      const { error: insertError } = await supabase
         .from('profiles')
-        .upsert([profileData])
-        .select()
-        .single();
-
-      if (profileError) {
-        console.error('Detailed profile creation error:', {
-          message: profileError.message,
-          code: profileError.code,
-          details: profileError.details,
-          hint: profileError.hint
+        .upsert([profileData], {
+          onConflict: 'id',
+          ignoreDuplicates: false
         });
-        // Supprimer l'utilisateur si la création du profil échoue
-        const { error: deleteError } = await supabase.auth.admin.deleteUser(authData.user.id);
-        if (deleteError) {
-          console.error('Error deleting user after profile creation failed:', deleteError);
-        }
-        throw new Error('Erreur lors de la création du profil : ' + profileError.message);
+
+      if (insertError) {
+        console.error('4. Erreur lors de la création du profil:', insertError);
+        throw new Error('Erreur lors de la création du profil : ' + insertError.message);
       }
 
-      console.log('Profile created successfully');
+      console.log('4. Profil créé avec succès');
 
-      // 5. Upload avatar si présent
-      if (avatar && authData.user?.id) {
+      // Upload de l'avatar si présent
+      if (avatar) {
+        console.log('5. Début upload avatar');
         try {
-          console.log('Uploading avatar...', avatar);
-
-          // Attendre un peu pour s'assurer que le profil est bien créé
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          // Créer un nom de fichier unique
           const fileExt = avatar.name.split('.').pop()?.toLowerCase() || 'jpg';
-          const fileName = `${authData.user.id}.${fileExt}`;
-          const filePath = `${authData.user.id}/${fileName}`;
+          const filePath = `${authData.user.id}/${authData.user.id}.${fileExt}`;
 
-          // Upload du fichier
           const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(filePath, avatar, {
-              cacheControl: '3600',
-              upsert: true,
-              contentType: `image/${fileExt}`
-            });
+            .upload(filePath, avatar, { upsert: true });
 
           if (uploadError) {
-            console.error('Avatar upload error:', uploadError);
-            throw new Error('Erreur lors de l\'upload de l\'avatar: ' + uploadError.message);
+            console.error('5. Erreur upload avatar:', uploadError);
+            toast.error('Erreur lors de l\'upload de l\'avatar');
+          } else {
+            console.log('5. Avatar uploadé avec succès');
+            const { data: urlData } = supabase.storage
+              .from('avatars')
+              .getPublicUrl(filePath);
+
+            if (urlData) {
+              const { error: updateError } = await supabase
+                .from('profiles')
+                .update({
+                  avatar_url: urlData.publicUrl,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', authData.user.id);
+
+              if (updateError) {
+                console.error('5. Erreur mise à jour URL avatar:', updateError);
+              } else {
+                console.log('5. URL avatar mis à jour');
+              }
+            }
           }
-
-          // Obtenir l'URL publique
-          const { data: urlData } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(filePath);
-
-          if (!urlData?.publicUrl) {
-            throw new Error('Impossible d\'obtenir l\'URL publique de l\'avatar');
-          }
-
-          console.log('Avatar public URL:', urlData.publicUrl);
-
-          // Mettre à jour le profil avec l'URL de l'avatar
-          const { error: updateAvatarError } = await supabase
-            .from('profiles')
-            .update({
-              avatar_url: urlData.publicUrl,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', authData.user.id);
-
-          if (updateAvatarError) {
-            console.error('Error updating avatar URL in profile:', updateAvatarError);
-            throw new Error('Erreur lors de la mise à jour du profil avec l\'avatar');
-          }
-
-          console.log('Avatar URL updated in profile successfully');
         } catch (error) {
-          console.error('Error in avatar upload process:', error);
-          // Ne pas bloquer l'inscription si l'upload de l'avatar échoue
-          toast.error('L\'avatar n\'a pas pu être uploadé, mais votre compte a été créé');
+          console.error('5. Erreur lors du traitement de l\'avatar:', error);
         }
       }
 
-      // Rediriger vers la page de vérification d'email
-      navigate('/verify-email', {
-        state: {
+      // Si c'est le premier utilisateur, on le connecte directement
+      if (isFirstUser) {
+        console.log('6. Tentative de connexion du premier utilisateur');
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email: formData.email,
-          message: 'Vérifiez votre email pour activer votre compte'
+          password: formData.password,
+        });
+
+        if (signInError) {
+          console.error('6. Erreur connexion premier utilisateur:', signInError);
+          toast.error('Compte créé mais erreur de connexion automatique');
+          // Rediriger vers la page de connexion même en cas d'erreur
+          navigate('/login', {
+            state: {
+              message: 'Compte créé avec succès. Vous pouvez maintenant vous connecter.'
+            }
+          });
+        } else {
+          console.log('6. Premier utilisateur connecté avec succès');
+          navigate('/');
         }
-      });
+      } else {
+        // Pour les autres utilisateurs, rediriger vers la page de connexion
+        console.log('6. Redirection vers la page de connexion');
+        navigate('/login', {
+          state: {
+            message: 'Compte créé avec succès. Vous pouvez maintenant vous connecter.'
+          }
+        });
+      }
 
     } catch (err: any) {
-      console.error('Registration error:', err);
+      console.error('Erreur globale:', err);
       if (err.message.includes('registered') || err.message.includes('already exists')) {
         setFormError('Cet email est déjà utilisé');
       } else if (err.message.includes('phone')) {

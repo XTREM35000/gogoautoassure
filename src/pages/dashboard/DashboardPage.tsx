@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 import {
   Car,
   CircleDollarSign,
@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useAuthStore } from '@/store/authStore';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 
 // Mock data
 const mockContracts = [
@@ -57,10 +58,67 @@ const mockPayments = [
   }
 ];
 
+interface DashboardStats {
+  totalClients: number;
+  totalContracts: number;
+  activeContracts: number;
+  pendingContracts: number;
+}
+
 export function DashboardPage() {
   const { user } = useAuthStore();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalClients: 0,
+    totalContracts: 0,
+    activeContracts: 0,
+    pendingContracts: 0
+  });
+  const [loading, setLoading] = useState(true);
 
-  if (!user) return null; // Protection supplémentaire
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      // Fetch total clients
+      const { data: clientsData, error: clientsError } = await supabase
+        .from('clients')
+        .select('count');
+
+      if (clientsError) throw clientsError;
+
+      // Fetch contracts stats
+      const { data: contractsData, error: contractsError } = await supabase
+        .from('contracts')
+        .select('status');
+
+      if (contractsError) throw contractsError;
+
+      const totalContracts = contractsData?.length || 0;
+      const activeContracts = contractsData?.filter(c => c.status === 'active').length || 0;
+      const pendingContracts = contractsData?.filter(c => c.status === 'pending').length || 0;
+
+      setStats({
+        totalClients: clientsData?.[0]?.count || 0,
+        totalContracts,
+        activeContracts,
+        pendingContracts
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,49 +139,41 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">
-              Contrats actifs
+              Total Clients
             </CardTitle>
-            <Car className="w-4 h-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2</div>
-            <p className="text-xs text-gray-500">+0% depuis le mois dernier</p>
+            <div className="text-2xl font-bold">{stats.totalClients}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">
-              Sinistres en cours
+              Total Contrats
             </CardTitle>
-            <AlertTriangle className="w-4 h-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1</div>
-            <p className="text-xs text-gray-500">+0% depuis le mois dernier</p>
+            <div className="text-2xl font-bold">{stats.totalContracts}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">
-              Primes payées (2023)
+              Contrats Actifs
             </CardTitle>
-            <CircleDollarSign className="w-4 h-4 text-teal-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(330000)}</div>
-            <p className="text-xs text-gray-500">+0% depuis le mois dernier</p>
+            <div className="text-2xl font-bold">{stats.activeContracts}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">
-              Échéance prochaine
+              Contrats en Attente
             </CardTitle>
-            <Calendar className="w-4 h-4 text-teal-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">14 Jan 2024</div>
-            <p className="text-xs text-gray-500">Dans 45 jours</p>
+            <div className="text-2xl font-bold">{stats.pendingContracts}</div>
           </CardContent>
         </Card>
       </div>
