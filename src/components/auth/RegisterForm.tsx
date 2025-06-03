@@ -211,4 +211,16 @@ export function RegisterForm() {
           placeholder="••••••••"
           className={errors.password ? "border-red-500" : ""}
         />
-        {e
+        {errors.password && <p className="text-sm text-red-500 mt-1">{errors.password}</p>}
+      </div>
+
+      <Button
+        type="submit"
+        disabled={loading}
+        className="w-full"
+      >
+        {loading ? "Création du compte..." : "Créer un compte"}
+      </Button>
+    </form>
+  )
+}

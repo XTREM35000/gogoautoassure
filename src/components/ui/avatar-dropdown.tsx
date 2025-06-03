@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -72,11 +72,20 @@ export function AvatarDropdown() {
           aria-label="Menu utilisateur"
         >
           <Avatar
-            src={user.avatar_url}
-            fallbackText={getFullName(user)}
-            size="sm"
             className="cursor-pointer hover:opacity-80 transition-opacity"
-          />
+            size="sm"
+          >
+            {user.avatar_url ? (
+              <Avatar.Image
+                src={user.avatar_url}
+                alt={getFullName(user)}
+              />
+            ) : (
+              <Avatar.Fallback>
+                {getFullName(user)}
+              </Avatar.Fallback>
+            )}
+          </Avatar>
         </button>
       </DropdownMenuTrigger>
 

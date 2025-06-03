@@ -100,16 +100,35 @@ export function AgentsPage() {
   const fetchAgents = async () => {
     try {
       const { data, error } = await supabase
-        .from('agents_view')
-        .select('*');
+        .from('profiles')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          email,
+          avatar_url,
+          status,
+          permissions,
+          created_at,
+          role
+        `)
+        .or('role.eq.agent,status.eq.pending')
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching agents:', error);
         throw error;
       }
 
-      console.log('Agents loaded:', data?.length);
-      setAgents(data || []);
+      // Filter and transform the data
+      const agentsData = (data || []).map(profile => ({
+        ...profile,
+        clients_count: 0, // These could be added later if needed
+        contracts_count: 0
+      }));
+
+      console.log('Agents loaded:', agentsData.length);
+      setAgents(agentsData);
     } catch (error) {
       console.error('Error fetching agents:', error);
       toast.error('Erreur lors du chargement des agents');
@@ -236,7 +255,7 @@ export function AgentsPage() {
         created_at: now,
         updated_at: now,
         avatar_url: null,
-        role: 'agent',
+        role: addForm.status === 'pending' ? 'user' : 'agent',
         status: addForm.status,
         display_name: display_name,
         permissions: addForm.permissions
@@ -248,21 +267,20 @@ export function AgentsPage() {
 
       if (profileError) throw profileError;
 
-      // Reset form and close dialog
+      await fetchAgents();
+      setIsAddDialogOpen(false);
       setAddForm({
         first_name: '',
         last_name: '',
         email: '',
         phone: '',
         status: 'pending',
-        permissions: ['manage_clients'],
+        permissions: ['manage_clients']
       });
-      setIsAddDialogOpen(false);
-      await fetchAgents();
       toast.success('Agent créé avec succès');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating agent:', error);
-      toast.error('Erreur lors de la création de l\'agent');
+      toast.error(error.message || 'Erreur lors de la création de l\'agent');
     }
   };
 

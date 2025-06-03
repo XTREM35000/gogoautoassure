@@ -1,121 +1,107 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type' // Added apikey here
 };
 
-interface Database {
-  public: {
-    Tables: {
-      profiles: {
-        Row: {
-          id: string;
-          email: string;
-          role: string;
-        };
-      };
-      // Ajoutez d'autres tables si nécessaire
-    };
-  };
-}
-
 serve(async (req) => {
-  // Gérer les requêtes OPTIONS pour CORS
+  // Gestion CORS
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Vérifier la méthode
-    if (req.method !== 'POST') {
-      throw new Error('Method not allowed');
-    }
+    // Vérification auth
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) throw new Error('Authorization header missing')
 
-    // Récupérer le token JWT de l'en-tête
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    )
 
-    // Créer un client Supabase
-    const supabaseClient = createClient<Database>(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-          detectSessionInUrl: false
-        }
-      }
-    );
+    // Vérification utilisateur admin
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) throw new Error('Authentication failed')
 
-    // Définir le JWT pour le client
-    supabaseClient.auth.setSession({
-      access_token: authHeader.replace('Bearer ', ''),
-      refresh_token: '',
-    });
-
-    // Vérifier si l'utilisateur est admin
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
-
-    if (userError || !user) {
-      throw new Error('Error fetching user');
-    }
-
-    // Récupérer le profil utilisateur
-    const { data: profile, error: profileError } = await supabaseClient
+    const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single();
+      .single()
 
-    if (profileError || !profile) {
-      throw new Error('Error fetching profile');
+    if (!profile || profile.role !== 'admin') {
+      throw new Error('Admin privileges required')
     }
 
-    if (profile.role !== 'admin') {
-      throw new Error('Unauthorized - Admin role required');
+    // Client admin (bypass RLS)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      { auth: { persistSession: false } }
+    )
+
+    // Tables à réinitialiser (sans permissions/admin_actions)
+    const tablesToReset = [
+      'paiements',
+      'sinistres',
+      'vignettes',
+      'contrats',
+      'vehicules',
+      'contracts',
+      'clients',
+      'profiles_backup',
+      'profiles' // Toujours en dernier
+    ]
+
+    // 1. Désactiver les triggers
+    await supabaseAdmin.rpc('disable_triggers')
+
+    // 2. Suppression des données
+    for (const table of tablesToReset) {
+      if (table === 'profiles') {
+        // Ne supprime que les non-admins
+        await supabaseAdmin
+          .from(table)
+          .delete()
+          .neq('id', user.id)
+          .neq('role', 'admin')
+      } else {
+        // Suppression standard
+        await supabaseAdmin
+          .from(table)
+          .delete()
+          .neq('id', 0)
+      }
+      console.log(`Table ${table} nettoyée`)
     }
 
-    // Journaliser l'action
-    await supabaseClient.from('admin_actions').insert({
-      user_id: user.id,
-      action: 'reset_database',
-      details: 'Database reset initiated',
-      timestamp: new Date().toISOString(),
-    });
-
-    // Réinitialiser la base de données
-    // Note: Vous devez créer cette fonction SQL dans votre base de données
-    const { error: resetError } = await supabaseClient.rpc('reset_database');
-
-    if (resetError) {
-      throw resetError;
-    }
+    // 3. Réactiver les triggers
+    await supabaseAdmin.rpc('enable_triggers')
 
     return new Response(
-      JSON.stringify({ message: 'Database reset successful' }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    );
+      JSON.stringify({
+        success: true,
+        message: 'Réinitialisation réussie (tables protégées conservées)'
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
 
   } catch (error) {
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        success: false,
+        error: error.message,
+        details: error.stack
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: error instanceof Error && error.message === 'Unauthorized - Admin role required' ? 403 : 500,
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
-    );
+    )
   }
-});
+})

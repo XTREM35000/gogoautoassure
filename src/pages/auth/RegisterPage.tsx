@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Car, Shield, ChevronRight } from 'lucide-react';
+import { Car, Shield, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AvatarUpload } from '@/components/ui/avatar-upload';
@@ -16,8 +16,8 @@ export function RegisterPage() {
     email: '',
     phone: '',
     password: '',
-    confirmPassword: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [avatar, setAvatar] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,11 +32,6 @@ export function RegisterPage() {
 
     if (formData.password.length < 6) {
       setFormError('Le mot de passe doit contenir au moins 6 caractères');
-      return false;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setFormError('Les mots de passe ne correspondent pas');
       return false;
     }
 
@@ -108,10 +103,12 @@ export function RegisterPage() {
       console.log('3. Vérification si premier utilisateur');
       let isFirstUser = false;
 
-      // Utiliser une requête directe pour vérifier s'il y a des profils
+      // Utiliser une requête directe pour vérifier s'il y a des profils actifs
       const { count, error: countError } = await supabase
         .from('profiles')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active')
+        .eq('role', 'admin');
 
       if (countError) {
         console.error('3. Erreur lors du comptage des profils:', countError);
@@ -119,6 +116,7 @@ export function RegisterPage() {
         isFirstUser = false;
       } else {
         isFirstUser = count === 0;
+        console.log('Nombre d\'administrateurs actifs:', count);
       }
 
       console.log('3. Premier utilisateur:', isFirstUser);
@@ -135,9 +133,8 @@ export function RegisterPage() {
         updated_at: now,
         avatar_url: null,
         role: isFirstUser ? 'admin' : 'user',
-        status: 'active',
-        display_name: display_name.trim(),
-        permissions: isFirstUser ? ['manage_system', 'manage_clients', 'manage_contracts'] : ['manage_clients']
+        status: isFirstUser ? 'active' : 'pending',
+        permissions: isFirstUser ? ['manage_system', 'manage_clients', 'manage_contracts'] : ['view_contracts']
       };
 
       console.log('4. Tentative de création du profil:', profileData);
@@ -159,23 +156,26 @@ export function RegisterPage() {
 
       // Upload de l'avatar si présent
       if (avatar) {
-        console.log('5. Début upload avatar');
+        console.log('5. Début upload avatar', { avatar });
         try {
           const fileExt = avatar.name.split('.').pop()?.toLowerCase() || 'jpg';
           const filePath = `${authData.user.id}/${authData.user.id}.${fileExt}`;
+          console.log('5.1 Chemin du fichier:', filePath);
 
           const { error: uploadError } = await supabase.storage
             .from('avatars')
             .upload(filePath, avatar, { upsert: true });
 
           if (uploadError) {
-            console.error('5. Erreur upload avatar:', uploadError);
+            console.error('5.2 Erreur upload avatar:', uploadError);
             toast.error('Erreur lors de l\'upload de l\'avatar');
           } else {
-            console.log('5. Avatar uploadé avec succès');
+            console.log('5.3 Avatar uploadé avec succès');
             const { data: urlData } = supabase.storage
               .from('avatars')
               .getPublicUrl(filePath);
+
+            console.log('5.4 URL publique:', urlData);
 
             if (urlData) {
               const { error: updateError } = await supabase
@@ -187,15 +187,17 @@ export function RegisterPage() {
                 .eq('id', authData.user.id);
 
               if (updateError) {
-                console.error('5. Erreur mise à jour URL avatar:', updateError);
+                console.error('5.5 Erreur mise à jour URL avatar:', updateError);
               } else {
-                console.log('5. URL avatar mis à jour');
+                console.log('5.6 URL avatar mis à jour avec succès:', urlData.publicUrl);
               }
             }
           }
         } catch (error) {
-          console.error('5. Erreur lors du traitement de l\'avatar:', error);
+          console.error('5.7 Erreur lors du traitement de l\'avatar:', error);
         }
+      } else {
+        console.log('5.0 Pas d\'avatar sélectionné');
       }
 
       // Si c'est le premier utilisateur, on le connecte directement
@@ -352,31 +354,26 @@ export function RegisterPage() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Mot de passe
               </label>
-              <div className="mt-1">
+              <div className="mt-1 relative">
                 <Input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirmer le mot de passe
-              </label>
-              <div className="mt-1">
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  required
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </button>
               </div>
             </div>
 

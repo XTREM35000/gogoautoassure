@@ -5,12 +5,12 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 3000, // Port forcé à 3001
+    port: 3001, // Port forcé à 3001
     strictPort: true, // Empêche le basculement vers un autre port si 3001 est occupé
     host: true, // Permet l'accès depuis le réseau local
   },
   preview: {
-    port: 3000, // Port pour la prévisualisation (npm run preview)
+    port: 3001, // Port pour la prévisualisation (npm run preview)
   },
   resolve: {
     alias: {
